@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 
-const BASE_API_URL = 'http://localhost:8000/api';
+const BASE_API_URL = 'https://epidemic-backend.onrender.com/api';
 
 // 🎨 BRAND NEW: A Custom, Hacker-Style Tooltip!
 const CustomTooltip = ({ active, payload }) => {

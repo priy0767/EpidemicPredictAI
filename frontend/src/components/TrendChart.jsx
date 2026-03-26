@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
-const BASE_API_URL = 'http://localhost:8000/api';
+const BASE_API_URL = 'https://epidemic-backend.onrender.com/api';
 
 const TrendChart = ({ country = "India", targetDate = "2021-11-05", mobility }) => {
   const [trendData, setTrendData] = useState([]);

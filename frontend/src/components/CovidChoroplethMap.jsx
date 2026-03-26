@@ -3,7 +3,7 @@ import { MapContainer, TileLayer, GeoJSON } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import axios from 'axios';
 
-const BASE_API_URL = 'http://localhost:8000/api';
+const BASE_API_URL = 'https://epidemic-backend.onrender.com/api';
 
 const CovidChoroplethMap = ({ 
   title, 
