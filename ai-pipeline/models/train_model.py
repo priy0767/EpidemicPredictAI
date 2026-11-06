@@ -4,6 +4,7 @@ from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 import joblib
 import json
 import os
+from pathlib import Path
 from evaluation_utils import chronological_purged_split
 
 print("🚀 Starting the Epidemic Predict Pro Global Model Factory...")
@@ -38,10 +39,15 @@ country_mapping = {
     'Zambia': 'ZM', 'Zimbabwe': 'ZW'
 }
 
-# Fetch Johns Hopkins Data once (it contains all countries)
-print("Downloading Johns Hopkins Global Case Data...")
-JHU_URL = "https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_confirmed_global.csv"
-global_cases = pd.read_csv(JHU_URL)
+# Load the public OWID daily country dataset downloaded by download_datasets.py.
+DATA_DIR = Path(__file__).resolve().parents[1] / "data"
+OWID_CASES_PATH = DATA_DIR / "owid-covid-data.csv"
+if not OWID_CASES_PATH.exists():
+    raise FileNotFoundError(
+        f"{OWID_CASES_PATH} not found. Run: python download_datasets.py"
+    )
+print(f"Loading Our World in Data cases from {OWID_CASES_PATH}...")
+global_cases = pd.read_csv(OWID_CASES_PATH, parse_dates=["date"])
 
 successful_countries = []
 
@@ -51,37 +57,42 @@ for country_name, country_code in country_mapping.items():
     print(f"🌍 Initiating Pipeline for: {country_name} ({country_code})")
     
     # --- A. CLEAN CASE DATA ---
-    # Fix dataset naming mismatches (JHU uses different names than Google)
-    jhu_name = country_name
-    if country_name == 'USA': jhu_name = 'US'
-    elif country_name == 'UK': jhu_name = 'United Kingdom'
-    elif country_name == 'South Korea': jhu_name = 'Korea, South'
-    elif country_name == 'Taiwan': jhu_name = 'Taiwan*'
-    elif country_name == 'Myanmar (Burma)': jhu_name = 'Burma'
-    elif country_name == 'Côte dIvoire': jhu_name = "Cote d'Ivoire"
+    # OWID uses standardized location names; map legacy UI labels where needed.
+    owid_name = {
+        "USA": "United States",
+        "UK": "United Kingdom",
+        "Côte dIvoire": "Cote d'Ivoire",
+        "South Korea": "South Korea",
+        "Taiwan": "Taiwan",
+        "Myanmar (Burma)": "Myanmar",
+    }.get(country_name, country_name)
 
-    # Safety check: Does JHU actually track this country?
-    if jhu_name not in global_cases['Country/Region'].values:
-        print(f"⚠️ Skipping {country_name}: Not found in JHU database.")
+    country_cases = global_cases[global_cases["location"] == owid_name].copy()
+    if country_cases.empty:
+        print(f"⚠️ Skipping {country_name}: not found in OWID data.")
         continue
 
-    country_cases = global_cases[global_cases['Country/Region'] == jhu_name].copy()
-    
-    # If a country has states/provinces in the dataset (like the US), sum them up
-    country_cases = country_cases.drop(columns=['Province/State', 'Lat', 'Long']).groupby('Country/Region').sum().reset_index()
-    
-    country_long = country_cases.melt(id_vars=['Country/Region'], var_name='Date', value_name='Total_Cases')
-    country_long['Date'] = pd.to_datetime(country_long['Date'])
-    country_long = country_long.sort_values('Date').reset_index(drop=True)
-    country_long['Daily_Cases'] = country_long['Total_Cases'].diff().fillna(0)
-    country_long['Daily_Cases'] = country_long['Daily_Cases'].apply(lambda x: max(x, 0))
+    country_cases["Date"] = pd.to_datetime(country_cases["date"], errors="coerce")
+    country_cases["Total_Cases"] = pd.to_numeric(country_cases["total_cases"], errors="coerce")
+    country_cases["Daily_Cases"] = pd.to_numeric(country_cases["new_cases"], errors="coerce")
+    country_cases["Daily_Cases"] = country_cases["Daily_Cases"].clip(lower=0)
+    country_long = (
+        country_cases[["Date", "Total_Cases", "Daily_Cases"]]
+        .dropna(subset=["Date", "Daily_Cases"])
+        .sort_values("Date")
+        .drop_duplicates(subset=["Date"], keep="last")
+        .reset_index(drop=True)
+    )
+    if country_long.empty:
+        print(f"⚠️ Skipping {country_name}: OWID has no usable daily case observations.")
+        continue
 
     # --- B. LOAD LOCAL MOBILITY DATA ---
     print(f"Loading local mobility data for {country_code}...")
     mobility_files = [
-        f"../data/2020_{country_code}_Region_Mobility_Report.csv",
-        f"../data/2021_{country_code}_Region_Mobility_Report.csv",
-        f"../data/2022_{country_code}_Region_Mobility_Report.csv"
+        DATA_DIR / f"2020_{country_code}_Region_Mobility_Report.csv",
+        DATA_DIR / f"2021_{country_code}_Region_Mobility_Report.csv",
+        DATA_DIR / f"2022_{country_code}_Region_Mobility_Report.csv"
     ]
     
     df_list = []
