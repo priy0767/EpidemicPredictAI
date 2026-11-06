@@ -22,18 +22,19 @@ The React/Vite application presents country selection, maps, historical trends, 
 
 - `GET /api/countries`: returns the configured country list.
 - `GET /api/map_snapshot`: queries historical cumulative cases from SQLite.
-- `GET /api/global_predictions`: loads country models where available; otherwise it falls back to a baseline estimate.
-- `POST /api/predict`: loads one country's model, retrieves recent history, calculates a model output and a scenario estimate, and returns a combined value.
+- `GET /api/global_predictions`: calculates each country's latest seven-day average daily cases, predicts the next-week average daily case count with the country model, and identifies countries using a persistence fallback.
+- `POST /api/predict`: derives the latest seven-day average daily cases from SQLite, applies the submitted mobility features to the country model, and returns the predicted next-week average daily cases.
 
 ### Data and model artifacts
-The API expects `epidemic_data.db` in its working directory and model files under `../ai-pipeline/models/`. The prediction route expects files named `model_<COUNTRY_CODE>.pkl` and optionally `importance_<COUNTRY_CODE>.json`.
+The API resolves the SQLite database and model directory from the repository structure, with `EPIDEMIC_DATABASE_PATH` and `EPIDEMIC_MODEL_DIR` overrides. The prediction route expects files named `model_<COUNTRY_CODE>.pkl` and optionally `importance_<COUNTRY_CODE>.json`.
 
 ## Important implementation details
 
-1. `/api/predict` averages the XGBoost output with a manually calculated mobility scenario value. This should be described as a hybrid application calculation, not a trained ensemble.
-2. `/api/global_predictions` supplies zero for all mobility inputs and multiplies a daily estimate by 14. This is not equivalent to a fully featured 14-day time-series rollout.
-3. The global route uses fallback estimates when a model is absent or inference fails.
-4. The API currently allows all CORS origins and uses interpolated SQL strings in several queries. These are security and robustness issues to address before production use.
+1. The trained target is the average daily case count over the next seven days. It is not a seven-day cumulative total or a fourteen-day total.
+2. The single-country route derives the current seven-day average from the latest seven historical database rows. Mobility values supplied by the UI are used as model features; the previous hand-written scenario blend has been removed.
+3. The global route currently supplies zero mobility values because it has no country-specific mobility input endpoint. It uses the current seven-day average as a persistence fallback and lists fallback countries in its response.
+4. The map color bands are visual magnitude bands only; they are not clinical or public-health risk classifications.
+5. CORS is configurable through `CORS_ORIGINS`, SQL values are parameterized, and API paths are configurable. Production deployments must set the exact frontend origins.
 
 ## Unverified areas
 
