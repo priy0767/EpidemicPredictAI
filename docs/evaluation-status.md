@@ -8,14 +8,15 @@ OWID's legacy complete CSV remains available at the stable URL used by the downl
 
 The training pipeline uses a chronological 80/20 holdout with a date-aware purge. A training row is retained only when its forward target window ends strictly before the first test feature date. This matters because each target is the seven-day rolling average of daily cases shifted seven days into the future.
 
-For each eligible country, the script writes `evaluation_XX.json` with split dates, sample counts, number of purged training rows, model MAE/RMSE/R², persistence-baseline MAE/RMSE, relative MAE, percentage improvement, feature importance, and whether the model beats the baseline on MAE. It also writes `evaluation_summary.json` with the number of countries beating persistence, median/mean MAE ratio, and total test samples.
+For each eligible country, the script writes `evaluation_XX.json` with split dates, sample counts, number of purged training rows, model MAE/RMSE/R², persistence-baseline MAE/RMSE, relative MAE, percentage improvement, feature importance, and whether the model beats the baseline on MAE. Each country report also contains three expanding-window rolling-origin folds comparing XGBoost, standardized Ridge regression, and persistence on the same fold dates. `evaluation_summary.json` records final-holdout aggregate metrics and counts of rolling folds won by each candidate.
 
 ## What the current script evaluates
 
 - **Input features:** 7-day average daily cases and four mobility features derived from 7-day rolling means shifted by 14 days.
 - **Target:** the 7-day rolling average of daily cases shifted seven days into the future (`Target_Cases_Next_Week`).
 - **Split:** first 80% of eligible rows form the pre-test period; final 20% are test rows. Pre-test rows whose target end date reaches the test start are purged.
-- **Model:** XGBoost regressor with 100 estimators, learning rate 0.1, max depth 5, and random state 42.
+- **Primary model:** XGBoost regressor with 100 estimators, learning rate 0.1, max depth 5, and random state 42.
+- **Rolling-origin candidates:** XGBoost, standardized Ridge regression (`alpha=1.0`), and persistence, evaluated on identical purged folds.
 - **Primary metric:** MAE, with RMSE and R² also recorded where defined.
 - **Baseline:** persistence of the current 7-day average daily-case feature, evaluated on exactly the same test rows.
 
