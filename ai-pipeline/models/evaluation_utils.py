@@ -58,7 +58,7 @@ def rolling_origin_purged_splits(frame, start_fractions=(0.5, 0.6, 0.7), test_fr
             raise ValueError("each fold must fit within the dataset")
         start_position = int(len(frame) * start_fraction)
         end_position = min(len(frame), int(len(frame) * (start_fraction + test_fraction)))
-        if start_position <= previous_end or end_position <= start_position:
+        if start_position < previous_end or end_position <= start_position:
             raise ValueError("rolling-origin folds must be ordered and non-empty")
 
         test_frame = frame.iloc[start_position:end_position].copy()
