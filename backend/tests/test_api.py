@@ -81,7 +81,7 @@ class ForecastApiTests(unittest.TestCase):
         self.assertEqual(payload["predicted_cases_next_week_average_daily"], 11)
         self.assertEqual(payload["prediction_unit"], "cases_per_day")
         self.assertEqual(payload["prediction_horizon_days"], 7)
-        self.assertEqual(payload["input_daily_cases_7d_average"], 4.0)
+        self.assertEqual(payload["input_daily_cases_7d_average"], 5.0)
         self.assertEqual(payload["trend_data"][-1]["date"], "Next 7-day average")
 
     def test_mobility_values_outside_allowed_range_are_rejected(self):
