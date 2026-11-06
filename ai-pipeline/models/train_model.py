@@ -1,7 +1,7 @@
 import pandas as pd
 import xgboost as xgb
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import mean_absolute_error
+from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 import joblib
 import json
 import os
@@ -128,6 +128,9 @@ for country_name, country_code in country_mapping.items():
         master_df[f'{col}_lag14'] = master_df[col].rolling(window=7).mean().shift(14)
 
     master_df['Target_Cases_Next_Week'] = master_df['Daily_Cases_7d_Avg'].shift(-7)
+    # Keep the date on which each forward-looking target becomes observable.
+    # This is needed to purge training labels that overlap the test period.
+    master_df['Target_End_Date'] = master_df['Date'].shift(-7)
     final_ml_df = master_df.dropna().copy()
 
     # Safety check: Is there enough data to train an AI?
@@ -141,13 +144,72 @@ for country_name, country_code in country_mapping.items():
     X = final_ml_df[ai_features]
     y = final_ml_df['Target_Cases_Next_Week']
 
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, shuffle=False)
-    
+    # Chronological holdout with label-aware purging. Each target at date t
+    # uses the next seven days; remove training rows whose target window reaches
+    # the first test feature date. Date-based purging remains correct if rows
+    # were removed because mobility observations were missing.
+    split_position = int(len(final_ml_df) * 0.8)
+    if split_position <= 0 or split_position >= len(final_ml_df):
+        print(f"❌ Skipping {country_name}: Unable to create chronological holdout.")
+        continue
+
+    test_df = final_ml_df.iloc[split_position:].copy()
+    test_start_date = test_df['Date'].min()
+    train_df = final_ml_df[
+        (final_ml_df.index < final_ml_df.index[split_position]) &
+        (final_ml_df['Target_End_Date'] < test_start_date)
+    ].copy()
+
+    if len(train_df) < 20 or test_df.empty:
+        print(f"❌ Skipping {country_name}: Insufficient samples after purging boundary labels.")
+        continue
+
+    X_train = train_df[ai_features]
+    y_train = train_df['Target_Cases_Next_Week']
+    X_test = test_df[ai_features]
+    y_test = test_df['Target_Cases_Next_Week']
+
     model = xgb.XGBRegressor(n_estimators=100, learning_rate=0.1, max_depth=5, random_state=42)
     model.fit(X_train, y_train)
 
-    error = mean_absolute_error(y_test, model.predict(X_test))
-    print(f"📊 Model MAE: {int(error)} cases per day.")
+    test_predictions = model.predict(X_test)
+    baseline_predictions = test_df['Daily_Cases_7d_Avg'].to_numpy()
+    model_mae = mean_absolute_error(y_test, test_predictions)
+    model_rmse = mean_squared_error(y_test, test_predictions) ** 0.5
+    baseline_mae = mean_absolute_error(y_test, baseline_predictions)
+    baseline_rmse = mean_squared_error(y_test, baseline_predictions) ** 0.5
+    model_r2 = r2_score(y_test, test_predictions) if len(test_df) >= 2 else None
+
+    evaluation = {
+        "country": country_name,
+        "country_code": country_code,
+        "target": "next_week_average_daily_cases",
+        "split_strategy": "chronological_80_20_with_forward_target_purge",
+        "train_start_date": train_df['Date'].min().strftime('%Y-%m-%d'),
+        "train_end_date": train_df['Date'].max().strftime('%Y-%m-%d'),
+        "test_start_date": test_df['Date'].min().strftime('%Y-%m-%d'),
+        "test_end_date": test_df['Date'].max().strftime('%Y-%m-%d'),
+        "train_samples": int(len(train_df)),
+        "test_samples": int(len(test_df)),
+        "purged_train_samples": int(split_position - len(train_df)),
+        "model_mae": float(model_mae),
+        "model_rmse": float(model_rmse),
+        "model_r2": float(model_r2) if model_r2 is not None else None,
+        "persistence_baseline_mae": float(baseline_mae),
+        "persistence_baseline_rmse": float(baseline_rmse),
+        "model_beats_baseline_mae": bool(model_mae < baseline_mae),
+        "xgboost_parameters": {
+            "n_estimators": 100, "learning_rate": 0.1, "max_depth": 5, "random_state": 42
+        }
+    }
+    with open(f'evaluation_{country_code}.json', 'w') as f:
+        json.dump(evaluation, f, indent=2)
+
+    print(
+        f"📊 {country_name} | Model MAE: {model_mae:.2f} | "
+        f"Persistence MAE: {baseline_mae:.2f} | "
+        f"Test samples: {len(test_df)}"
+    )
 
     # --- E. EXPORT PRODUCTION ASSETS ---
     joblib.dump(model, f'model_{country_code}.pkl')
