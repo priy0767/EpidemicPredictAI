@@ -4,7 +4,9 @@ These notes are based on inspection of the checked-in API and README. They are n
 
 ## Modeling and interpretation
 
-- The training script documented as `backend/train_model.py` was not present at that path in the audited repository revision. Training reproducibility and model provenance remain unverified.
+- The training script is `ai-pipeline/models/train_model.py`. It depends on local Google mobility CSV files and downloads a moving Johns Hopkins dataset URL at runtime, so exact data provenance and reproducibility are not yet guaranteed.
+- Its chronological 80/20 split has no seven-day purge even though each target uses the following seven days; training target windows near the boundary can overlap the test period. It also has no separate validation set.
+- The script prints per-country MAE but does not save split dates, sample counts, baseline comparisons, or a machine-readable evaluation report.
 - The prediction endpoint averages a learned model output with a hand-written scenario formula. The scenario formula is not learned from the training data and its coefficients require justification and validation.
 - The global prediction endpoint passes zero-valued mobility features and may fall back to a simple baseline when model files or usable cases are missing.
 - Multiplying a daily prediction by 14 should not be presented as a validated 14-day trajectory without a clearly defined target and evaluation.
@@ -14,8 +16,8 @@ These notes are based on inspection of the checked-in API and README. They are n
 ## Data and validation
 
 - Dataset source/version, cleaning, missing-value handling, geographic mapping, and temporal coverage need reproducible documentation.
-- Time-series evaluation must preserve chronological order and prevent future leakage in rolling and lagged features.
-- No verified held-out MAE, RMSE, or R² values are currently documented.
+- Time-series evaluation must preserve chronological order and prevent future leakage in rolling and lagged features. The current split should add a seven-day embargo/purge to prevent overlapping target windows across train and test.
+- The training script prints holdout MAE, but no values have been independently reproduced or recorded in a versioned report; RMSE and R² are not calculated.
 
 ## API and security
 
