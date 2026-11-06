@@ -85,7 +85,7 @@ cd ../ai-pipeline/models
 python train_model.py
 ```
 
-The script expects mobility files such as `ai-pipeline/data/2020_IN_Region_Mobility_Report.csv` (and corresponding 2021/2022 files). It downloads the Johns Hopkins confirmed-case time series at runtime. It writes `model_XX.pkl` and `importance_XX.json` into the current `ai-pipeline/models/` directory. The script currently prints a holdout MAE per country but does not save a reproducible evaluation report. See [evaluation status](docs/evaluation-status.md) before interpreting those values.
+The script expects mobility files such as `ai-pipeline/data/2020_IN_Region_Mobility_Report.csv` (and corresponding 2021/2022 files). It downloads the Johns Hopkins confirmed-case time series at runtime. It writes `model_XX.pkl` and `importance_XX.json` into the current `ai-pipeline/models/` directory. The script now uses a date-aware purge so training target windows end before the test period. It writes one `evaluation_XX.json` report per eligible country with test dates, sample counts, model MAE/RMSE/R², and a persistence-baseline comparison. These are run-specific measurements, not precomputed results committed to this repository. Run the split-helper tests from `ai-pipeline/models/` with `python -m unittest discover -s tests -v`. See [evaluation status](docs/evaluation-status.md) before interpreting the metrics.
 
 ### 4. Frontend
 
