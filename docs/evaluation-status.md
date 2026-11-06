@@ -25,7 +25,7 @@ For each eligible country, the script writes `evaluation_XX.json` with split dat
 4. **Missing mobility rows are dropped.** This can make the effective sample timeline irregular. The purge uses dates rather than assuming a fixed number of retained rows.
 5. **Data reproducibility is incomplete.** The JHU data is downloaded from a moving GitHub URL at runtime, while mobility CSV files are expected locally. Pin data snapshots and record provenance/licensing before publishing results.
 6. **No results have been independently reproduced here.** The generated reports must be reviewed for sample sizes, baseline comparisons, and plausibility before metrics are quoted in a portfolio.
-7. **The API behavior differs from the training target.** The global endpoint multiplies a predicted daily value by 14; this is not the trained target or a validated 14-day cumulative forecast.
+7. **The forecast is an average daily count, not a cumulative total.** The API now returns the model's next-week average daily case count without multiplying by seven or fourteen. The global endpoint uses zero mobility inputs and identifies countries where a persistence baseline is used. The single-country endpoint derives its current seven-day average from historical rows.
 
 ## Run the split tests
 
