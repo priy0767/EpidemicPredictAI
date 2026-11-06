@@ -168,13 +168,21 @@ def get_global_predictions(target_date: date = Query(default=date(2021, 11, 5)))
                 }])
                 daily_pred = max(0, int(model.predict(input_df)[0]))
                 predictions[country_name] = daily_pred 
-            except (OSError, ValueError, EOFError):
+            except Exception as exc:
+                print(f"Model inference failed for {country_name}; using persistence baseline: {exc}")
                 predictions[country_name] = max(0, int(baseline_cases))
                 fallback_countries.append(country_name)
         else:
-            predictions[country_name] = int(baseline_cases * 14)
-            
-    return {"metric": "next_week_average_daily_cases", "unit": "cases_per_day", "horizon_days": 7, "predictions": predictions}
+            predictions[country_name] = max(0, int(baseline_cases))
+            fallback_countries.append(country_name)
+
+    return {
+        "metric": "next_week_average_daily_cases",
+        "unit": "cases_per_day",
+        "horizon_days": 7,
+        "predictions": predictions,
+        "fallback_countries": fallback_countries,
+    }
 
 # --- 4. ENDPOINT FOR THE SLIDERS & CHARTS ---
 @app.post("/api/predict")
@@ -245,7 +253,7 @@ def predict_cases(data: PredictionRequest):
     if not trend_data:
         trend_data = [{"date": "N/A", "actual": 0, "predicted": None}]
 
-    # D. THE HYBRID AI PREDICTION ENGINE
+    # D. NEXT-WEEK AVERAGE DAILY CASE FORECAST
     input_df = pd.DataFrame([{
         'Daily_Cases_7d_Avg': daily_cases_7d_avg,
         'retail_and_recreation_percent_change_from_baseline_lag14': data.retail_recreation_lag14,
@@ -259,7 +267,6 @@ def predict_cases(data: PredictionRequest):
     # hand-written scenario formula.
     final_prediction = max(0, int(model.predict(input_df)[0]))
 
-    last_actual_cases = trend_data[-1]["actual"]
     trend_data[-1]["predicted"] = None 
     
     trend_data.append({
