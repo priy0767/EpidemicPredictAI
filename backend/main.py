@@ -85,7 +85,6 @@ class PredictionRequest(BaseModel):
     country: str
     region: str
     target_date: date
-    daily_cases_7d_avg: float = Field(ge=0, allow_inf_nan=False)
     retail_recreation_lag14: float = Field(ge=-100, le=200, allow_inf_nan=False)
     transit_stations_lag14: float = Field(ge=-100, le=200, allow_inf_nan=False)
     workplaces_lag14: float = Field(ge=-100, le=200, allow_inf_nan=False)
@@ -122,25 +121,25 @@ def get_map_snapshot(target_date: date = Query(default=date(2021, 11, 5))):
 # --- 3. ENDPOINT FOR THE BIG AI PREDICTION MAP (HEAVY RUN) ---
 @app.get("/api/global_predictions")
 def get_global_predictions(target_date: date = Query(default=date(2021, 11, 5))):
-    """HEAVY AI RUN: Loads models for all countries to predict 14-day outbreaks."""
+    """Predicts next-week average daily cases for each country (not a cumulative 14-day total)."""
     try:
         with sqlite3.connect(DATABASE_PATH) as conn:
             df = pd.read_sql_query(
                 """
-                SELECT h.Country, h.Daily_Cases
-                FROM historical_cases AS h
-                JOIN (
-                    SELECT Country, MAX(Date) AS LatestDate
+                SELECT Country, AVG(Daily_Cases) AS Daily_Cases_7d_Avg
+                FROM (
+                    SELECT Country, Daily_Cases,
+                           ROW_NUMBER() OVER (PARTITION BY Country ORDER BY Date DESC) AS row_num
                     FROM historical_cases
                     WHERE Date <= ?
-                    GROUP BY Country
-                ) AS latest
-                  ON latest.Country = h.Country AND latest.LatestDate = h.Date
+                )
+                WHERE row_num <= 7
+                GROUP BY Country
                 """,
                 conn,
                 params=(target_date,),
             )
-        recent_cases = dict(zip(df["Country"], df["Daily_Cases"]))
+        recent_cases = dict(zip(df["Country"], df["Daily_Cases_7d_Avg"]))
     except sqlite3.Error as exc:
         raise HTTPException(status_code=500, detail="Historical database query failed") from exc
 
@@ -167,13 +166,13 @@ def get_global_predictions(target_date: date = Query(default=date(2021, 11, 5)))
                     'residential_percent_change_from_baseline_lag14': 0
                 }])
                 daily_pred = max(0, int(model.predict(input_df)[0]))
-                predictions[country_name] = daily_pred * 14 
+                predictions[country_name] = daily_pred 
             except (OSError, ValueError, EOFError):
-                predictions[country_name] = int(baseline_cases * 14)
+                predictions[country_name] = max(0, int(baseline_cases))
         else:
             predictions[country_name] = int(baseline_cases * 14)
             
-    return {"predictions": predictions}
+    return {"metric": "next_week_average_daily_cases", "unit": "cases_per_day", "horizon_days": 7, "predictions": predictions}
 
 # --- 4. ENDPOINT FOR THE SLIDERS & CHARTS ---
 @app.post("/api/predict")
@@ -219,7 +218,7 @@ def predict_cases(data: PredictionRequest):
                 FROM historical_cases
                 WHERE Country = ? AND Date <= ?
                 ORDER BY Date DESC
-                LIMIT 5
+                LIMIT 7
                 """,
                 conn,
                 params=(sql_name, data.target_date.isoformat()),
@@ -228,6 +227,9 @@ def predict_cases(data: PredictionRequest):
         raise HTTPException(status_code=500, detail="Historical database query failed") from exc
     
     history_df = history_df.sort_values('Date').reset_index(drop=True)
+    if len(history_df) < 7:
+        raise HTTPException(status_code=422, detail='At least seven days of history are required for a forecast')
+    daily_cases_7d_avg = float(history_df['Daily_Cases'].mean())
     
     trend_data = []
     for _, row in history_df.iterrows():
@@ -243,25 +245,23 @@ def predict_cases(data: PredictionRequest):
 
     # D. THE HYBRID AI PREDICTION ENGINE
     input_df = pd.DataFrame([{
-        'Daily_Cases_7d_Avg': data.daily_cases_7d_avg,
+        'Daily_Cases_7d_Avg': daily_cases_7d_avg,
         'retail_and_recreation_percent_change_from_baseline_lag14': data.retail_recreation_lag14,
         'transit_stations_percent_change_from_baseline_lag14': data.transit_stations_lag14,
         'workplaces_percent_change_from_baseline_lag14': data.workplaces_lag14,
         'residential_percent_change_from_baseline_lag14': data.residential_lag14
     }])
 
-    base_prediction = max(0, int(model.predict(input_df)[0]))
-    
-    # Scenario Engine to ensure React Sliders ALWAYS work
-    mobility_factor = 1.0 + ((data.retail_recreation_lag14 + data.transit_stations_lag14 + data.workplaces_lag14) * 0.003) - (data.residential_lag14 * 0.005)
-    scenario_prediction = int(data.daily_cases_7d_avg * mobility_factor)
-    final_prediction = max(0, int((base_prediction + scenario_prediction) / 2))
+    # The model target is the next week's average daily cases. Do not multiply
+    # this value by seven or fourteen, and do not blend it with an untrained
+    # hand-written scenario formula.
+    final_prediction = max(0, int(model.predict(input_df)[0]))
 
     last_actual_cases = trend_data[-1]["actual"]
-    trend_data[-1]["predicted"] = last_actual_cases 
+    trend_data[-1]["predicted"] = None 
     
     trend_data.append({
-        "date": "Next Week",
+        "date": "Next 7-day average",
         "actual": None,
         "predicted": final_prediction
     })
@@ -270,7 +270,10 @@ def predict_cases(data: PredictionRequest):
 
     return {
         "status": "success",
-        "predicted_cases_next_week": final_prediction,
+        "predicted_cases_next_week_average_daily": final_prediction,
+        "prediction_unit": "cases_per_day",
+        "prediction_horizon_days": 7,
+        "input_daily_cases_7d_average": round(daily_cases_7d_avg, 2),
         "feature_importance": feature_data,
         "trend_data": trend_data,
         "map_hotspots": safe_hotspots
