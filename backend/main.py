@@ -1,5 +1,8 @@
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
+from datetime import date
+from pathlib import Path
+
+from fastapi import FastAPI, HTTPException, Query
+from pydantic import BaseModel, Field
 from fastapi.middleware.cors import CORSMiddleware
 import joblib
 import pandas as pd
@@ -11,13 +14,26 @@ print("🚀 Starting Epidemic Predict Pro GLOBAL API (Massive 130+ Edition)...")
 
 app = FastAPI(title="Global Epidemic API")
 
+# Set CORS_ORIGINS to a comma-separated list of deployed frontend origins.
+# Local development remains available by default; credentials are not needed.
+DEFAULT_CORS_ORIGINS = "http://localhost:5173,http://127.0.0.1:5173"
+CORS_ORIGINS = [
+    origin.strip()
+    for origin in os.getenv("CORS_ORIGINS", DEFAULT_CORS_ORIGINS).split(",")
+    if origin.strip()
+]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], 
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=CORS_ORIGINS,
+    allow_credentials=False,
+    allow_methods=["GET", "POST"],
+    allow_headers=["Content-Type", "Authorization"],
 )
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+DATABASE_PATH = Path(os.getenv("EPIDEMIC_DATABASE_PATH", str(Path(__file__).resolve().parent / "epidemic_data.db")))
+MODEL_DIR = Path(os.getenv("EPIDEMIC_MODEL_DIR", str(PROJECT_ROOT / "ai-pipeline" / "models")))
+
 
 # 1. THE MASSIVE HARDCODED DICTIONARY
 COUNTRY_CODES = {
@@ -68,12 +84,12 @@ MAP_HOTSPOTS = {
 class PredictionRequest(BaseModel):
     country: str
     region: str
-    target_date: str 
-    daily_cases_7d_avg: float
-    retail_recreation_lag14: float
-    transit_stations_lag14: float
-    workplaces_lag14: float
-    residential_lag14: float
+    target_date: date
+    daily_cases_7d_avg: float = Field(ge=0, allow_inf_nan=False)
+    retail_recreation_lag14: float = Field(ge=-100, le=200, allow_inf_nan=False)
+    transit_stations_lag14: float = Field(ge=-100, le=200, allow_inf_nan=False)
+    workplaces_lag14: float = Field(ge=-100, le=200, allow_inf_nan=False)
+    residential_lag14: float = Field(ge=-100, le=200, allow_inf_nan=False)
 
 # --- 1. ENDPOINT FOR DROPDOWN ---
 @app.get("/api/countries")
@@ -83,46 +99,50 @@ def get_available_countries():
 
 # --- 2. ENDPOINT FOR THE SMALL REAL CASES CHOROPLETH MAP ---
 @app.get("/api/map_snapshot")
-def get_map_snapshot(target_date: str = "2021-11-05"):
+def get_map_snapshot(target_date: date = Query(default=date(2021, 11, 5))):
     """Fetches the real cumulative cases for every country up to the target date"""
-    conn = sqlite3.connect("epidemic_data.db")
-    query = f"""
-        SELECT Country, MAX(Total_Cases) as Total 
-        FROM historical_cases 
-        WHERE Date <= '{target_date}' 
-        GROUP BY Country
-    """
     try:
-        df = pd.read_sql(query, conn)
-        snapshot = dict(zip(df['Country'], df['Total']))
-    except Exception as e:
-        print(f"Map Error: {e}")
-        snapshot = {}
-    conn.close()
-    
+        with sqlite3.connect(DATABASE_PATH) as conn:
+            df = pd.read_sql_query(
+                """
+                SELECT Country, MAX(Total_Cases) AS Total
+                FROM historical_cases
+                WHERE Date <= ?
+                GROUP BY Country
+                """,
+                conn,
+                params=(target_date,),
+            )
+        snapshot = dict(zip(df["Country"], df["Total"]))
+    except sqlite3.Error as exc:
+        raise HTTPException(status_code=500, detail="Historical database query failed") from exc
+
     return {"snapshot": snapshot}
 
 # --- 3. ENDPOINT FOR THE BIG AI PREDICTION MAP (HEAVY RUN) ---
 @app.get("/api/global_predictions")
-def get_global_predictions(target_date: str = "2021-11-05"):
+def get_global_predictions(target_date: date = Query(default=date(2021, 11, 5))):
     """HEAVY AI RUN: Loads models for all countries to predict 14-day outbreaks."""
-    conn = sqlite3.connect("epidemic_data.db")
-    
-    # Get the latest known *daily cases* right before the target date
-    query = f"""
-        SELECT Country, Daily_Cases 
-        FROM historical_cases 
-        WHERE Date <= '{target_date}' 
-        GROUP BY Country
-        HAVING Date = MAX(Date)
-    """
     try:
-        df = pd.read_sql(query, conn)
-        recent_cases = dict(zip(df['Country'], df['Daily_Cases']))
-    except Exception as e:
-        print(f"DB Error: {e}")
-        recent_cases = {}
-    conn.close()
+        with sqlite3.connect(DATABASE_PATH) as conn:
+            df = pd.read_sql_query(
+                """
+                SELECT h.Country, h.Daily_Cases
+                FROM historical_cases AS h
+                JOIN (
+                    SELECT Country, MAX(Date) AS LatestDate
+                    FROM historical_cases
+                    WHERE Date <= ?
+                    GROUP BY Country
+                ) AS latest
+                  ON latest.Country = h.Country AND latest.LatestDate = h.Date
+                """,
+                conn,
+                params=(target_date,),
+            )
+        recent_cases = dict(zip(df["Country"], df["Daily_Cases"]))
+    except sqlite3.Error as exc:
+        raise HTTPException(status_code=500, detail="Historical database query failed") from exc
 
     predictions = {}
     
@@ -134,9 +154,9 @@ def get_global_predictions(target_date: str = "2021-11-05"):
         elif country_name == 'Taiwan': db_name = 'Taiwan*'
         
         baseline_cases = recent_cases.get(db_name, 0)
-        model_path = f"../ai-pipeline/models/model_{code}.pkl"
+        model_path = MODEL_DIR / f"model_{code}.pkl"
         
-        if os.path.exists(model_path) and baseline_cases > 0:
+        if model_path.is_file() and baseline_cases > 0:
             try:
                 model = joblib.load(model_path)
                 input_df = pd.DataFrame([{
@@ -148,7 +168,7 @@ def get_global_predictions(target_date: str = "2021-11-05"):
                 }])
                 daily_pred = max(0, int(model.predict(input_df)[0]))
                 predictions[country_name] = daily_pred * 14 
-            except:
+            except (OSError, ValueError, EOFError):
                 predictions[country_name] = int(baseline_cases * 14)
         else:
             predictions[country_name] = int(baseline_cases * 14)
@@ -164,20 +184,23 @@ def predict_cases(data: PredictionRequest):
     code = COUNTRY_CODES[data.country]
     
     # A. LOAD AI BRAIN
-    model_path = f"../ai-pipeline/models/model_{code}.pkl"
-    if not os.path.exists(model_path):
+    model_path = MODEL_DIR / f"model_{code}.pkl"
+    if not model_path.is_file():
         raise HTTPException(status_code=500, detail=f"AI Model for {data.country} missing!")
-    model = joblib.load(model_path)
+    try:
+        model = joblib.load(model_path)
+    except (OSError, ValueError, EOFError) as exc:
+        raise HTTPException(status_code=500, detail=f"Model artifact for {data.country} could not be loaded") from exc
 
     # B. LOAD FEATURE IMPORTANCE (No Fake Data Fallback)
-    importance_path = f"../ai-pipeline/models/importance_{code}.json"
+    importance_path = MODEL_DIR / f"importance_{code}.json"
     feature_data = []
-    if os.path.exists(importance_path):
+    if importance_path.is_file():
         try:
-            with open(importance_path, 'r') as f:
+            with open(importance_path, 'r', encoding='utf-8') as f:
                 feature_data = json.load(f)
-        except Exception as e:
-            print(f"Error loading JSON for {code}: {e}")
+        except (OSError, json.JSONDecodeError) as exc:
+            raise HTTPException(status_code=500, detail="Feature importance artifact is invalid") from exc
 
     # C. TIME MACHINE SQL QUERY
     sql_name = data.country
@@ -188,16 +211,21 @@ def predict_cases(data: PredictionRequest):
     elif data.country == 'Myanmar (Burma)': sql_name = 'Burma'
     elif data.country == 'Côte dIvoire': sql_name = "Cote d'Ivoire"
 
-    conn = sqlite3.connect("epidemic_data.db")
-    query = f"""
-        SELECT Date, Daily_Cases 
-        FROM historical_cases 
-        WHERE Country = '{sql_name}' 
-        AND Date <= '{data.target_date}'
-        ORDER BY Date DESC LIMIT 5
-    """
-    history_df = pd.read_sql(query, conn)
-    conn.close()
+    try:
+        with sqlite3.connect(DATABASE_PATH) as conn:
+            history_df = pd.read_sql_query(
+                """
+                SELECT Date, Daily_Cases
+                FROM historical_cases
+                WHERE Country = ? AND Date <= ?
+                ORDER BY Date DESC
+                LIMIT 5
+                """,
+                conn,
+                params=(sql_name, data.target_date.isoformat()),
+            )
+    except sqlite3.Error as exc:
+        raise HTTPException(status_code=500, detail="Historical database query failed") from exc
     
     history_df = history_df.sort_values('Date').reset_index(drop=True)
     
