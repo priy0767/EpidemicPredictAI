@@ -50,6 +50,7 @@ print(f"Loading Our World in Data cases from {OWID_CASES_PATH}...")
 global_cases = pd.read_csv(OWID_CASES_PATH, parse_dates=["date"])
 
 successful_countries = []
+evaluation_results = []
 
 # Loop through each country and build a dedicated AI brain
 for country_name, country_code in country_mapping.items():
@@ -200,10 +201,20 @@ for country_name, country_code in country_mapping.items():
         "persistence_baseline_mae": float(baseline_mae),
         "persistence_baseline_rmse": float(baseline_rmse),
         "model_beats_baseline_mae": bool(model_mae < baseline_mae),
+        "mae_ratio_to_persistence": float(model_mae / baseline_mae) if baseline_mae > 0 else None,
+        "mae_improvement_vs_persistence_pct": (
+            float((baseline_mae - model_mae) / baseline_mae * 100)
+            if baseline_mae > 0 else None
+        ),
+        "feature_importance": {
+            name: float(importance)
+            for name, importance in zip(ai_features, model.feature_importances_)
+        },
         "xgboost_parameters": {
             "n_estimators": 100, "learning_rate": 0.1, "max_depth": 5, "random_state": 42
         }
     }
+    evaluation_results.append(evaluation)
     with open(f'evaluation_{country_code}.json', 'w') as f:
         json.dump(evaluation, f, indent=2)
 
@@ -231,5 +242,39 @@ for country_name, country_code in country_mapping.items():
         
     print(f"✅ {country_name} AI Engine and JSON data saved successfully!")
     successful_countries.append(country_name)
+
+if evaluation_results:
+    valid_ratios = [
+        item["mae_ratio_to_persistence"]
+        for item in evaluation_results
+        if item["mae_ratio_to_persistence"] is not None
+    ]
+    summary = {
+        "trained_country_count": len(evaluation_results),
+        "countries_beating_persistence": sum(
+            item["model_beats_baseline_mae"] for item in evaluation_results
+        ),
+        "countries_not_beating_persistence": sum(
+            not item["model_beats_baseline_mae"] for item in evaluation_results
+        ),
+        "median_mae_ratio_to_persistence": (
+            float(pd.Series(valid_ratios).median()) if valid_ratios else None
+        ),
+        "mean_mae_ratio_to_persistence": (
+            float(pd.Series(valid_ratios).mean()) if valid_ratios else None
+        ),
+        "total_test_samples": sum(item["test_samples"] for item in evaluation_results),
+        "interpretation": (
+            "A ratio below 1.0 means XGBoost has lower MAE than persistence. "
+            "A ratio above 1.0 means persistence performed better."
+        ),
+    }
+    with open("evaluation_summary.json", "w") as f:
+        json.dump(summary, f, indent=2)
+    print(
+        f"📈 Evaluation summary: {summary['countries_beating_persistence']}/"
+        f"{summary['trained_country_count']} countries beat persistence; "
+        f"median MAE ratio={summary['median_mae_ratio_to_persistence']:.3f}"
+    )
 
 print(f"\n🎉 GLOBAL MODEL FACTORY COMPLETE. Successfully built {len(successful_countries)} AI Brains.")
