@@ -8,9 +8,11 @@ These notes are based on inspection of the checked-in API and README. They are n
 - The training script now applies a date-aware purge: training target windows must end before the first test feature date. The helper has unit tests for overlapping windows, missing rows, unsorted data, and invalid split fractions.
 - The script writes per-country JSON reports with split dates, sample counts, model MAE/RMSE/R², and a persistence baseline. These reports have not yet been generated against the full local datasets in this remote review.
 - The pipeline still has no separate validation set or multi-origin rolling evaluation; do not tune against the test set.
-- The prediction endpoint averages a learned model output with a hand-written scenario formula. The scenario formula is not learned from the training data and its coefficients require justification and validation.
+- The previous hand-written scenario blend has been removed; single-country forecasts now use the trained model output directly. Mobility slider values are hypothetical user inputs, not observed future mobility.
 - The global prediction endpoint passes zero-valued mobility features and may fall back to a simple baseline when model files or usable cases are missing.
-- Multiplying a daily prediction by 14 should not be presented as a validated 14-day trajectory without a clearly defined target and evaluation.
+- The forecast target is the next-week average daily case count, not a seven-day cumulative total or fourteen-day total. Do not relabel or rescale it as either.
+- The global prediction endpoint uses zero mobility inputs and falls back to the latest seven-day average when model inference is unavailable. Fallback countries are exposed in the response, but the UI should make fallback status visible to users.
+- The choropleth's color bands are presentation thresholds, not validated epidemiological risk categories.
 - Feature importance indicates model reliance under a particular model/data setup; it does not establish causality.
 - The app should not be used for medical decisions or public-health policy.
 
