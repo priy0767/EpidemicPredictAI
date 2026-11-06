@@ -15,6 +15,7 @@ const CovidChoroplethMap = ({
 }) => {
   const [geoData, setGeoData] = useState(null);
   const [mapData, setMapData] = useState({});
+  const [fallbackCountries, setFallbackCountries] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
 
   // Theme colors to match the Deep Slate dashboard
@@ -41,14 +42,17 @@ const CovidChoroplethMap = ({
       .then(res => {
         if (isPrediction) {
           setMapData(res.data.predictions || {});
+          setFallbackCountries(res.data.fallback_countries || []);
         } else {
           setMapData(res.data.snapshot || {});
+          setFallbackCountries([]);
         }
         setIsLoading(false);
       })
       .catch(err => {
         console.error("Error fetching map data:", err);
         setMapData({});
+        setFallbackCountries([]);
         setIsLoading(false);
       });
   }, [targetDate, isPrediction]);
@@ -115,7 +119,10 @@ const CovidChoroplethMap = ({
 
     const value = mapData[dbName];
     const displayValue = value !== undefined && value !== null ? value.toLocaleString() : "No Data";
-    layer.bindTooltip(`<strong>${dbName}</strong><br/>${isPrediction ? "Next-week avg. cases/day" : "Cumulative cases"}: ${displayValue}`, {
+    const forecastSource = isPrediction && fallbackCountries.includes(dbName)
+      ? "<br/><em>Persistence baseline (model unavailable)</em>"
+      : "";
+    layer.bindTooltip(`<strong>${dbName}</strong><br/>${isPrediction ? "Next-week avg. cases/day" : "Cumulative cases"}: ${displayValue}${forecastSource}`, {
       direction: 'top',
       className: 'custom-map-tooltip'
     });
