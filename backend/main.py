@@ -144,6 +144,7 @@ def get_global_predictions(target_date: date = Query(default=date(2021, 11, 5)))
         raise HTTPException(status_code=500, detail="Historical database query failed") from exc
 
     predictions = {}
+    fallback_countries = []
     
     for country_name, code in COUNTRY_CODES.items():
         db_name = country_name
@@ -169,6 +170,7 @@ def get_global_predictions(target_date: date = Query(default=date(2021, 11, 5)))
                 predictions[country_name] = daily_pred 
             except (OSError, ValueError, EOFError):
                 predictions[country_name] = max(0, int(baseline_cases))
+                fallback_countries.append(country_name)
         else:
             predictions[country_name] = int(baseline_cases * 14)
             
