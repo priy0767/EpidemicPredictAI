@@ -44,7 +44,6 @@ const FeatureChart = ({ country = "India", targetDate = "2021-11-05" }) => {
       country: country,
       region: "All",
       target_date: targetDate,
-      daily_cases_7d_avg: 5000, 
       retail_recreation_lag14: 0,
       transit_stations_lag14: 0,
       workplaces_lag14: 0,
