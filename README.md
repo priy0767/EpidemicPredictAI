@@ -45,7 +45,7 @@ See [architecture documentation](docs/architecture.md) for implementation detail
 - `backend/epidemic_data.db` — SQLite database (if included in your checkout).
 - `ai-pipeline/models/` — country model and feature-importance artifacts (if included).
 
-**Training-code status:** The README previously instructed users to run `backend/train_model.py`, but that file is not present at that path in the repository revision audited for this documentation. The training pipeline, dataset provenance, and reproducible evaluation therefore remain unverified. Do not assume that the checked-in model artifacts can be regenerated from the current repository instructions.
+**Training-code status:** The training script is present at `ai-pipeline/models/train_model.py` (not `backend/train_model.py`). It downloads Johns Hopkins global confirmed-case data, reads country-specific Google mobility CSV files from `ai-pipeline/data/`, builds lagged mobility features, and trains one XGBoost regressor per eligible country. The script must be run from `ai-pipeline/models/` for its relative input/output paths to resolve as written. Reproducibility still depends on obtaining the expected mobility files and compatible dependencies.
 
 ## Run locally
 
@@ -74,7 +74,20 @@ The API expects the SQLite database and model artifacts at the relative paths re
 API base URL: `http://localhost:8000`  
 Interactive API docs: `http://localhost:8000/docs`
 
-### 3. Frontend
+#### 3. Train country models (optional; requires the source mobility CSV files)
+
+From the repository root, install the backend ML dependencies, then run the script from its own directory so its relative paths resolve:
+
+```bash
+cd backend
+pip install -r requirements.txt
+cd ../ai-pipeline/models
+python train_model.py
+```
+
+The script expects mobility files such as `ai-pipeline/data/2020_IN_Region_Mobility_Report.csv` (and corresponding 2021/2022 files). It downloads the Johns Hopkins confirmed-case time series at runtime. It writes `model_XX.pkl` and `importance_XX.json` into the current `ai-pipeline/models/` directory. The script currently prints a holdout MAE per country but does not save a reproducible evaluation report. See [evaluation status](docs/evaluation-status.md) before interpreting those values.
+
+### 4. Frontend
 
 In a second terminal:
 
