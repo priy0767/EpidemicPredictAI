@@ -22,11 +22,11 @@ These notes are based on inspection of the checked-in API and README. They are n
 
 ## API and security
 
-- CORS is configured with wildcard origins. Production deployments should restrict origins to the actual frontend domains.
-- SQL queries are assembled with string interpolation. Use parameterized queries to avoid SQL injection and quoting bugs.
-- Database connections should be managed with context managers and predictable error handling.
-- Broad exception handling in global inference hides the underlying error and silently substitutes a fallback. Log structured errors and expose safe diagnostics.
-- Validate date formats and numeric ranges at the API boundary.
+- The API now uses an explicit CORS allowlist from `CORS_ORIGINS`, defaulting to local Vite origins. Production deployments must set this variable to the exact frontend origin(s), or browser requests from the deployed frontend will fail.
+- SQL query values are now parameterized in the inspected endpoints.
+- Database connections use context managers and database failures return controlled HTTP 500 responses.
+- Date fields and mobility inputs have request validation; mobility percentages are constrained to a documented broad range.
+- Global inference still falls back to a simple baseline when a model cannot be used; this behavior should be surfaced clearly in the API response rather than silently presented as a model forecast.
 - Pin and audit dependencies; the current requirements file lists only a small subset of runtime packages.
 
 ## Operational and repository hygiene
