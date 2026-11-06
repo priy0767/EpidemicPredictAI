@@ -5,8 +5,9 @@ These notes are based on inspection of the checked-in API and README. They are n
 ## Modeling and interpretation
 
 - The training script is `ai-pipeline/models/train_model.py`. It depends on local Google mobility CSV files and downloads a moving Johns Hopkins dataset URL at runtime, so exact data provenance and reproducibility are not yet guaranteed.
-- Its chronological 80/20 split has no seven-day purge even though each target uses the following seven days; training target windows near the boundary can overlap the test period. It also has no separate validation set.
-- The script prints per-country MAE but does not save split dates, sample counts, baseline comparisons, or a machine-readable evaluation report.
+- The training script now applies a date-aware purge: training target windows must end before the first test feature date. The helper has unit tests for overlapping windows, missing rows, unsorted data, and invalid split fractions.
+- The script writes per-country JSON reports with split dates, sample counts, model MAE/RMSE/R², and a persistence baseline. These reports have not yet been generated against the full local datasets in this remote review.
+- The pipeline still has no separate validation set or multi-origin rolling evaluation; do not tune against the test set.
 - The prediction endpoint averages a learned model output with a hand-written scenario formula. The scenario formula is not learned from the training data and its coefficients require justification and validation.
 - The global prediction endpoint passes zero-valued mobility features and may fall back to a simple baseline when model files or usable cases are missing.
 - Multiplying a daily prediction by 14 should not be presented as a validated 14-day trajectory without a clearly defined target and evaluation.
@@ -16,8 +17,8 @@ These notes are based on inspection of the checked-in API and README. They are n
 ## Data and validation
 
 - Dataset source/version, cleaning, missing-value handling, geographic mapping, and temporal coverage need reproducible documentation.
-- Time-series evaluation must preserve chronological order and prevent future leakage in rolling and lagged features. The current split should add a seven-day embargo/purge to prevent overlapping target windows across train and test.
-- The training script prints holdout MAE, but no values have been independently reproduced or recorded in a versioned report; RMSE and R² are not calculated.
+- Time-series evaluation must preserve chronological order and prevent future leakage in rolling and lagged features. The current holdout purges overlapping forward target windows by comparing actual dates, rather than assuming a fixed row gap.
+- The training script now records MAE, RMSE, R², and persistence-baseline metrics in per-country JSON reports, but no full-dataset run has been independently reproduced during this review.
 
 ## API and security
 
