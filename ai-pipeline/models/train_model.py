@@ -5,6 +5,7 @@ from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 import joblib
 import json
 import os
+from evaluation_utils import chronological_purged_split
 
 print("🚀 Starting the Epidemic Predict Pro Global Model Factory...")
 
@@ -148,17 +149,11 @@ for country_name, country_code in country_mapping.items():
     # uses the next seven days; remove training rows whose target window reaches
     # the first test feature date. Date-based purging remains correct if rows
     # were removed because mobility observations were missing.
-    split_position = int(len(final_ml_df) * 0.8)
-    if split_position <= 0 or split_position >= len(final_ml_df):
-        print(f"❌ Skipping {country_name}: Unable to create chronological holdout.")
+    try:
+        train_df, test_df, purged_sample_count = chronological_purged_split(final_ml_df, 0.8)
+    except ValueError as split_error:
+        print(f"❌ Skipping {country_name}: {split_error}")
         continue
-
-    test_df = final_ml_df.iloc[split_position:].copy()
-    test_start_date = test_df['Date'].min()
-    train_df = final_ml_df[
-        (final_ml_df.index < final_ml_df.index[split_position]) &
-        (final_ml_df['Target_End_Date'] < test_start_date)
-    ].copy()
 
     if len(train_df) < 20 or test_df.empty:
         print(f"❌ Skipping {country_name}: Insufficient samples after purging boundary labels.")
@@ -191,7 +186,7 @@ for country_name, country_code in country_mapping.items():
         "test_end_date": test_df['Date'].max().strftime('%Y-%m-%d'),
         "train_samples": int(len(train_df)),
         "test_samples": int(len(test_df)),
-        "purged_train_samples": int(split_position - len(train_df)),
+        "purged_train_samples": int(purged_sample_count),
         "model_mae": float(model_mae),
         "model_rmse": float(model_rmse),
         "model_r2": float(model_r2) if model_r2 is not None else None,
