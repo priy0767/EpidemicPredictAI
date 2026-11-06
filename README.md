@@ -1,180 +1,125 @@
-# 🦠 Epidemic Predict Pro
-### 👨‍💻 Developed by Priyanshu Soni  
-*A specialized Health-Tech solution for predictive pandemic modeling and mobility-driven outbreak analysis.*
+# Epidemic Predict Pro
 
----
+A full-stack epidemic data exploration and prediction prototype built with React, FastAPI, XGBoost, and SQLite.
 
-## 📌 Project Overview
-**Epidemic Predict Pro** is a sophisticated, full-stack AI platform designed to solve one of the biggest challenges in modern healthcare: **predicting infectious disease outbreaks before they peak**.
+**Author:** Priyanshu Soni  
+**Live demo:** https://epidemic-predict-ai-git-main-jais-projects-833fe4a0.vercel.app/
 
-By integrating high-quality epidemiological data from **Johns Hopkins University (JHU)** with **Google Global Mobility Reports**, the system models how human movement (Retail, Transit, Workplace, Residential) directly influences viral transmission.
+> **Research/prototype disclaimer:** This project is an educational and exploratory prototype. Its outputs are not medical advice, public-health guidance, or validated operational forecasts. Model performance has not yet been independently established in the repository.
 
----
+## What it does
 
-## 🌐 Live Prototype & Deployment
-The application follows a **Microservices Architecture** for scalability and performance:
+- Displays historical country-level case data on a map.
+- Provides country selection and historical trend views.
+- Exposes a prediction endpoint that loads country-specific XGBoost artifacts.
+- Provides mobility-input scenario controls and feature-importance data where available.
 
-- 🚀 **Frontend Dashboard:** Hosted on Vercel Edge Network for ultra-fast global UI delivery  
-- ⚙️ **AI Backend API:** Hosted on Render Compute for Machine Learning inference  
+## Architecture
 
-🔗 **Live Demo:**  
-https://epidemic-predict-ai-git-main-jais-projects-833fe4a0.vercel.app/
+```mermaid
+flowchart LR
+  U[User] --> FE[React + Vite dashboard]
+  FE -->|HTTP JSON| API[FastAPI service]
+  API --> DB[(SQLite historical cases)]
+  API --> MODEL[Country XGBoost artifacts]
+  API --> OUT[Prediction response]
+  OUT --> FE
+```
 
-> ⚠️ Note: Backend may take ~60 seconds to wake up after inactivity.
+See [architecture documentation](docs/architecture.md) for implementation details and current caveats.
 
----
+## Technology
 
-## ☁️ System Architecture
-- **Frontend (Vercel):**
-  - React 19 + Vite
-  - Global CDN → instant UI loading
+| Layer | Technologies |
+|---|---|
+| Frontend | React 19, Vite, Leaflet, Recharts, Axios |
+| API | Python, FastAPI, Uvicorn, Pydantic |
+| ML inference | XGBoost, joblib, pandas |
+| Storage | SQLite |
 
-- **Backend (Render):**
-  - FastAPI server
-  - 100+ trained XGBoost models
-  - SQLite3 database
+## Repository layout
 
----
+- `frontend/` — browser dashboard.
+- `backend/main.py` — API endpoints and inference logic.
+- `backend/seed_db.py` — database seeding script.
+- `backend/epidemic_data.db` — SQLite database (if included in your checkout).
+- `ai-pipeline/models/` — country model and feature-importance artifacts (if included).
 
-## ✨ Core Features
-- 🌍 **AI-Powered Risk Map**  
-  Dynamic global choropleth map showing 14-day outbreak risk predictions  
+**Training-code status:** The README previously instructed users to run `backend/train_model.py`, but that file is not present at that path in the repository revision audited for this documentation. The training pipeline, dataset provenance, and reproducible evaluation therefore remain unverified. Do not assume that the checked-in model artifacts can be regenerated from the current repository instructions.
 
-- ⏱️ **Global Time Machine**  
-  Replay pandemic history (2020–2023) and compare predictions vs real data  
+## Run locally
 
-- 🎛️ **What-If Scenario Simulator**  
-  Adjust mobility (e.g., reduce transit by 50%) and instantly see predicted outcomes  
+### 1. Clone
 
-- 📊 **XGBoost Feature Importance**  
-  Transparent AI showing which mobility factor drives spread in each region  
-
----
-
-## 🧠 AI & Data Science Methodology
-
-This system uses a **Multivariate Time Series approach**:
-
-- **Algorithm Used:** XGBoost Regressor (XGBRegressor)  
-- **Multivariate Modeling:** Uses mobility variables instead of only past cases  
-- **14-Day Incubation Lag:** Matches real-world virus incubation period  
-- **Log Transformation:** Normalizes population differences  
-- **7-Day Rolling Average:** Removes noisy reporting fluctuations  
-
----
-
-## 🛠️ Backend Workflow (Pipeline)
-
-### 🧩 Stage 1: `train_model.py`
-- Data preprocessing (JHU + Google Mobility)
-- Feature engineering
-- Train 100+ country-specific models
-- Save models as `.pkl`
-
-### 📚 Stage 2: `seed_db.py`
-- Populate SQLite database (`epidemic_data.db`)
-- Fast and portable storage
-
-### 🔗 Stage 3: `main.py`
-- FastAPI backend
-- Real-time ML inference
-- API endpoints for frontend
-
----
-
-## 📦 Tech Stack
-
-### 🎨 Frontend
-- React 19 (Vite)  
-- Leaflet.js  
-- Recharts  
-- Axios  
-
-### ⚙️ Backend
-- Python 3.9+  
-- FastAPI  
-- Uvicorn  
-
-### 🧠 AI / ML
-- XGBoost  
-- Scikit-Learn  
-- Pandas  
-- NumPy  
-
-### 🗄️ Database
-- SQLite3  
-
----
-
-## 🚀 Installation & Setup
-
-### 🔧 Prerequisites
-- Python 3.9+  
-- Node.js 18+  
-- Git  
-
----
-
-### 1️⃣ Clone Repository
 ```bash
 git clone https://github.com/priy0767/EpidemicPredictAI.git
 cd EpidemicPredictAI
 ```
 
----
-
-## ⚙️ Backend Setup (IMPORTANT)
+### 2. Backend
 
 ```bash
 cd backend
-python -m venv venv
-source venv/bin/activate      # Windows: venv\Scripts\activate
+python -m venv .venv
+# Windows PowerShell:
+.venv\Scripts\Activate.ps1
+# macOS/Linux:
+# source .venv/bin/activate
 pip install -r requirements.txt
-
-# Train models & prepare database
-python train_model.py
-python seed_db.py
-
-# 🚀 Start Backend Server
 uvicorn main:app --reload
 ```
 
-✅ Backend runs on: http://localhost:8000  
+The API expects the SQLite database and model artifacts at the relative paths referenced in `backend/main.py`. Check that these files exist in your local checkout and that the model directory layout matches the API's expected paths before starting the service. The current requirements file may need additional packages depending on the exact frontend/backend environment; dependency pinning is a follow-up task.
 
----
+API base URL: `http://localhost:8000`  
+Interactive API docs: `http://localhost:8000/docs`
 
-## 🎨 Frontend Setup (IMPORTANT)
+### 3. Frontend
+
+In a second terminal:
 
 ```bash
 cd frontend
-npm install --legacy-peer-deps
-
-# 🚀 Start Frontend
+npm install
 npm run dev
 ```
 
-✅ Frontend runs on: http://localhost:5173  
+Vite normally serves the dashboard at `http://localhost:5173`.
 
----
+## API overview
 
-## 🧪 How It Works (Simple Flow)
-1. Frontend sends user inputs (mobility sliders)
-2. FastAPI backend processes request
-3. XGBoost models generate predictions
-4. Results are returned and visualized instantly
+| Method | Endpoint | Purpose |
+|---|---|---|
+| GET | `/api/countries` | Returns supported country names |
+| GET | `/api/map_snapshot` | Returns historical cumulative-case snapshot |
+| GET | `/api/global_predictions` | Returns country-level estimates using available models or fallback values |
+| POST | `/api/predict` | Runs the country model and scenario calculation |
 
----
+For request fields and implementation details, inspect [backend/main.py](backend/main.py).
 
-## 🏆 Hackathon Project
-Built for **Health-Tech Hackathon**  
-Focused on real-world epidemic prediction and decision-making tools.
+## Prediction behavior and evaluation status
 
----
+The `/api/predict` endpoint currently computes an XGBoost prediction and a separate hand-written mobility scenario estimate, then averages the two. This is a hybrid application rule, not a separately trained ensemble. The global endpoint also uses zero-valued mobility inputs and fallback estimates when model/data conditions are not met.
 
-## 👨‍💻 Author
-**Priyanshu Soni**
+No verified held-out chronological MAE, RMSE, or R² results are published in this repository yet. See:
+- [Evaluation status](docs/evaluation-status.md)
+- [Known limitations](docs/limitations.md)
 
----
+Metrics should only be added after the training pipeline, target definition, time-based split, feature construction, and baseline comparison have been reproduced and checked. Do not interpret training scores as future forecasting performance.
 
-## ⭐ Support
-If you found this project useful, consider giving it a ⭐ on GitHub!
+## Security and deployment notes
+
+The current API source contains permissive CORS settings and SQL statements assembled with string interpolation. These should be reviewed before production use. Keep credentials and private configuration out of source control, restrict CORS to trusted frontend origins, and use parameterized SQL queries.
+
+## Contributing
+
+Issues and pull requests are welcome. When changing the modeling pipeline, include:
+1. Reproducible data and preprocessing steps.
+2. A chronological train/validation/test strategy.
+3. Metrics against a simple baseline.
+4. Tests for feature construction and prediction behavior.
+5. Clear notes on data limitations and intended use.
+
+## License
+
+No license file was identified during this documentation pass. Until a license is added, the repository should not be assumed to grant general reuse or redistribution rights.
