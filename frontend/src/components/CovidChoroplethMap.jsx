@@ -15,6 +15,7 @@ const CovidChoroplethMap = ({
 }) => {
   const [geoData, setGeoData] = useState(null);
   const [mapData, setMapData] = useState({});
+  const [fallbackCountries, setFallbackCountries] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
 
   // Theme colors to match the Deep Slate dashboard
@@ -41,25 +42,28 @@ const CovidChoroplethMap = ({
       .then(res => {
         if (isPrediction) {
           setMapData(res.data.predictions || {});
+          setFallbackCountries(res.data.fallback_countries || []);
         } else {
           setMapData(res.data.snapshot || {});
+          setFallbackCountries([]);
         }
         setIsLoading(false);
       })
       .catch(err => {
         console.error("Error fetching map data:", err);
         setMapData({});
+        setFallbackCountries([]);
         setIsLoading(false);
       });
   }, [targetDate, isPrediction]);
 
-  // Determine colors based on whether it is Prediction (14-day) or Historical (Total Cases)
+  // Prediction values are next-week average daily cases, not 14-day totals.
   const getColor = (value) => {
     if (value === undefined || value === null) return '#1F2937'; 
 
     if (isPrediction) {
-      return value > 50000 ? '#F87171' : 
-             value > 10000 ? '#FBBF24' : 
+      return value > 3500 ? '#F87171' : 
+             value > 700 ? '#FBBF24' : 
              value > 0     ? '#34D399' : 
                              '#1F2937';
     } else {
@@ -114,8 +118,11 @@ const CovidChoroplethMap = ({
     });
 
     const value = mapData[dbName];
-    const displayValue = value ? value.toLocaleString() : "No Data";
-    layer.bindTooltip(`<strong>${dbName}</strong><br/>Cases: ${displayValue}`, {
+    const displayValue = value !== undefined && value !== null ? value.toLocaleString() : "No Data";
+    const forecastSource = isPrediction && fallbackCountries.includes(dbName)
+      ? "<br/><em>Persistence baseline (model unavailable)</em>"
+      : "";
+    layer.bindTooltip(`<strong>${dbName}</strong><br/>${isPrediction ? "Next-week avg. cases/day" : "Cumulative cases"}: ${displayValue}${forecastSource}`, {
       direction: 'top',
       className: 'custom-map-tooltip'
     });

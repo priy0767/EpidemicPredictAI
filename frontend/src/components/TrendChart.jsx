@@ -24,7 +24,6 @@ const TrendChart = ({ country = "India", targetDate = "2021-11-05", mobility }) 
       country: country,
       region: "All",
       target_date: targetDate,
-      daily_cases_7d_avg: 5000, 
       retail_recreation_lag14: mobility?.retail || 0,
       transit_stations_lag14: mobility?.transit || 0,
       workplaces_lag14: mobility?.work || 0,
@@ -85,7 +84,7 @@ const TrendChart = ({ country = "India", targetDate = "2021-11-05", mobility }) 
           <Area type="monotone" dataKey="actual" name="Actual Cases" stroke={theme.accent} strokeWidth={3} fillOpacity={1} fill="url(#colorActual)" />
           
           {/* Coral Red area for the AI prediction */}
-          <Area type="monotone" dataKey="predicted" name="Predicted Next Week" stroke={theme.danger} strokeWidth={3} strokeDasharray="6 6" fillOpacity={1} fill="url(#colorPredicted)" />
+          <Area type="monotone" dataKey="predicted" name="Next 7-day average daily cases" stroke={theme.danger} strokeWidth={3} strokeDasharray="6 6" fillOpacity={1} fill="url(#colorPredicted)" />
         </AreaChart>
       </ResponsiveContainer>
     </div>
