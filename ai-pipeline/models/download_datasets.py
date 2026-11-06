@@ -53,7 +53,7 @@ def download_mobility_data(country_codes=None, output_dir=DATA_DIR):
     frame["Date"] = pd.to_datetime(frame["date"], errors="coerce")
     frame = frame[frame["Date"].dt.year.isin([2020, 2021, 2022])]
     frame = frame[frame["sub_region_1"].isna()]
-    frame = frame[["country_region_code", "Date", *MOBILITY_COLUMNS]].dropna(subset=["Date"])
+    frame = frame[["country_region_code", "sub_region_1", "date", "Date", *MOBILITY_COLUMNS]].dropna(subset=["Date"])
 
     saved = []
     for code in sorted(set(country_codes)):
