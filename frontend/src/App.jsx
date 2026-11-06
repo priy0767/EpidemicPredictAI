@@ -158,8 +158,8 @@ function App() {
           
           <div style={{ backgroundColor: theme.cardBg, borderRadius: '16px', padding: '24px', border: theme.border, boxShadow: theme.shadow }}>
             <CovidChoroplethMap 
-              title="Predicted Outbreak Risk (Next 14 Days)" 
-              subtitle="Simulated risk levels based on mobility and historical momentum."
+              title="Predicted Average Daily Cases (Next 7 Days)" 
+              subtitle="Model estimate of average daily cases over the next seven days."
               isPrediction={true} 
               mapHeight="540px" 
               onCountryHover={setHoveredCountry} 
