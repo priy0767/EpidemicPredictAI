@@ -1,6 +1,9 @@
 import pandas as pd
 import xgboost as xgb
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import StandardScaler
+from sklearn.linear_model import Ridge
 import joblib
 import json
 import os
@@ -197,9 +200,17 @@ for country_name, country_code in country_mapping.items():
         )
         fold_model.fit(fold_train[ai_features], fold_train["Target_Cases_Next_Week"])
         fold_predictions = fold_model.predict(fold_test[ai_features])
+
+        # Regularized linear candidate: scale features inside each fold to avoid
+        # allowing the case-count feature's magnitude to dominate the fit.
+        ridge_model = make_pipeline(StandardScaler(), Ridge(alpha=1.0))
+        ridge_model.fit(fold_train[ai_features], fold_train["Target_Cases_Next_Week"])
+        ridge_predictions = ridge_model.predict(fold_test[ai_features])
+
         fold_baseline = fold_test["Daily_Cases_7d_Avg"].to_numpy()
         fold_y = fold_test["Target_Cases_Next_Week"]
         fold_mae = mean_absolute_error(fold_y, fold_predictions)
+        ridge_mae = mean_absolute_error(fold_y, ridge_predictions)
         fold_baseline_mae = mean_absolute_error(fold_y, fold_baseline)
         rolling_fold_results.append({
             "fold": fold_number,
@@ -209,9 +220,12 @@ for country_name, country_code in country_mapping.items():
             "train_end_date": fold_train["Date"].max().strftime("%Y-%m-%d"),
             "test_start_date": fold_test["Date"].min().strftime("%Y-%m-%d"),
             "test_end_date": fold_test["Date"].max().strftime("%Y-%m-%d"),
-            "model_mae": float(fold_mae),
+            "xgboost_mae": float(fold_mae),
+            "ridge_mae": float(ridge_mae),
             "persistence_baseline_mae": float(fold_baseline_mae),
-            "model_beats_baseline_mae": bool(fold_mae < fold_baseline_mae),
+            "xgboost_beats_persistence": bool(fold_mae < fold_baseline_mae),
+            "ridge_beats_persistence": bool(ridge_mae < fold_baseline_mae),
+            "ridge_beats_xgboost": bool(ridge_mae < fold_mae),
         })
 
     rolling_model_maes = [item["model_mae"] for item in rolling_fold_results]
@@ -244,17 +258,33 @@ for country_name, country_code in country_mapping.items():
         ),
         "rolling_origin_evaluation": {
             "strategy": "three_expanding_windows_before_final_20_percent_holdout",
+            "candidate_models": {
+                "xgboost": {"n_estimators": 100, "learning_rate": 0.1, "max_depth": 5},
+                "ridge": {"alpha": 1.0, "standardization": "StandardScaler fitted per fold"},
+                "baseline": "persistence_current_7_day_average",
+            },
             "fold_count": len(rolling_fold_results),
             "folds": rolling_fold_results,
-            "mean_model_mae": (
-                float(pd.Series(rolling_model_maes).mean()) if rolling_model_maes else None
+            "mean_xgboost_mae": (
+                float(pd.Series([item["xgboost_mae"] for item in rolling_fold_results]).mean())
+                if rolling_fold_results else None
+            ),
+            "mean_ridge_mae": (
+                float(pd.Series([item["ridge_mae"] for item in rolling_fold_results]).mean())
+                if rolling_fold_results else None
             ),
             "mean_persistence_baseline_mae": (
                 float(pd.Series(rolling_baseline_maes).mean())
                 if rolling_baseline_maes else None
             ),
-            "folds_beating_persistence": sum(
-                item["model_beats_baseline_mae"] for item in rolling_fold_results
+            "folds_xgboost_beating_persistence": sum(
+                item["xgboost_beats_persistence"] for item in rolling_fold_results
+            ),
+            "folds_ridge_beating_persistence": sum(
+                item["ridge_beats_persistence"] for item in rolling_fold_results
+            ),
+            "folds_ridge_beating_xgboost": sum(
+                item["ridge_beats_xgboost"] for item in rolling_fold_results
             ),
         },
         "feature_importance": {
@@ -315,9 +345,25 @@ if evaluation_results:
             float(pd.Series(valid_ratios).mean()) if valid_ratios else None
         ),
         "total_test_samples": sum(item["test_samples"] for item in evaluation_results),
+        "rolling_origin_fold_count": sum(
+            item["rolling_origin_evaluation"]["fold_count"] for item in evaluation_results
+        ),
+        "rolling_folds_xgboost_beating_persistence": sum(
+            item["rolling_origin_evaluation"]["folds_xgboost_beating_persistence"]
+            for item in evaluation_results
+        ),
+        "rolling_folds_ridge_beating_persistence": sum(
+            item["rolling_origin_evaluation"]["folds_ridge_beating_persistence"]
+            for item in evaluation_results
+        ),
+        "rolling_folds_ridge_beating_xgboost": sum(
+            item["rolling_origin_evaluation"]["folds_ridge_beating_xgboost"]
+            for item in evaluation_results
+        ),
         "interpretation": (
             "A ratio below 1.0 means XGBoost has lower MAE than persistence. "
-            "A ratio above 1.0 means persistence performed better."
+            "A ratio above 1.0 means persistence performed better. Rolling-origin "
+            "candidate comparisons are diagnostic and do not use the final holdout."
         ),
     }
     with open("evaluation_summary.json", "w") as f:
