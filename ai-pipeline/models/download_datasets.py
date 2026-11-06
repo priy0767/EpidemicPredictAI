@@ -1,4 +1,4 @@
-"""Download public COVID-19 case and mobility data for model training.
+""""Download public COVID-19 case and mobility data for model training.
 
 Sources:
 - Our World in Data's archived complete historical COVID-19 CSV.
@@ -8,6 +8,8 @@ The OWID legacy CSV is a historical snapshot, not a live feed. The downloader
 keeps only national-level Google mobility observations from 2020-2022.
 """
 from pathlib import Path
+import time
+from urllib.error import URLError
 
 import pandas as pd
 
@@ -23,13 +25,32 @@ MOBILITY_COLUMNS = [
 ]
 
 
+def read_csv_with_retries(source, **kwargs):
+    """Read a remote CSV, retrying transient DNS/network failures."""
+    attempts = 4
+    for attempt in range(1, attempts + 1):
+        try:
+            return pd.read_csv(source, **kwargs)
+        except (URLError, TimeoutError, ConnectionError) as exc:
+            if attempt == attempts:
+                raise RuntimeError(
+                    f"Could not download {source} after {attempts} attempts: {exc}"
+                ) from exc
+            delay = 2 ** attempt
+            print(
+                f"Network error downloading {source} "
+                f"(attempt {attempt}/{attempts}); retrying in {delay}s..."
+            )
+            time.sleep(delay)
+
+
 def download_case_data(output_dir=DATA_DIR):
     """Download OWID's complete historical country/date CSV."""
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     destination = output_dir / "owid-covid-data.csv"
     print(f"Downloading OWID case data to {destination} ...")
-    frame = pd.read_csv(
+    frame = read_csv_with_retries(
         OWID_URL,
         usecols=["iso_code", "location", "date", "new_cases", "total_cases"],
     )
@@ -47,7 +68,7 @@ def download_mobility_data(country_codes=None, output_dir=DATA_DIR):
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     print("Downloading Google's historical global mobility report ...")
-    frame = pd.read_csv(GOOGLE_MOBILITY_URL, low_memory=False)
+    frame = read_csv_with_retries(GOOGLE_MOBILITY_URL, low_memory=False)
     required = {
         "country_region_code", "country_region", "sub_region_1", "date",
         *MOBILITY_COLUMNS,
