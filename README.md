@@ -45,7 +45,7 @@ See [architecture documentation](docs/architecture.md) for implementation detail
 - `backend/epidemic_data.db` — SQLite database (if included in your checkout).
 - `ai-pipeline/models/` — country model and feature-importance artifacts (if included).
 
-**Training-code status:** The training script is present at `ai-pipeline/models/train_model.py` (not `backend/train_model.py`). It downloads Johns Hopkins global confirmed-case data, reads country-specific Google mobility CSV files from `ai-pipeline/data/`, builds lagged mobility features, and trains one XGBoost regressor per eligible country. The script must be run from `ai-pipeline/models/` for its relative input/output paths to resolve as written. Reproducibility still depends on obtaining the expected mobility files and compatible dependencies.
+**Training-code status:** The training script is present at `ai-pipeline/models/train_model.py`. The companion `download_datasets.py` obtains the public Our World in Data (OWID) historical case series and Google's archived global mobility report, then creates the country/year mobility files expected by the trainer. Google stopped updating its Community Mobility Reports on 15 October 2022, so this is historical research data, not live mobility data. Run the downloader before training; see the reproducible commands below.
 
 ## Run locally
 
@@ -74,18 +74,19 @@ The API resolves the SQLite database and model directory from the repository lay
 API base URL: `http://localhost:8000`  
 Interactive API docs: `http://localhost:8000/docs`
 
-#### 3. Train country models (optional; requires the source mobility CSV files)
+#### 3. Download public data and train country models
 
-From the repository root, install the backend ML dependencies, then run the script from its own directory so its relative paths resolve:
+From the repository root, install the backend ML dependencies, then run both scripts from the model directory:
 
 ```bash
 cd backend
 pip install -r requirements.txt
 cd ../ai-pipeline/models
+python download_datasets.py
 python train_model.py
 ```
 
-The script expects mobility files such as `ai-pipeline/data/2020_IN_Region_Mobility_Report.csv` (and corresponding 2021/2022 files). It downloads the Johns Hopkins confirmed-case time series at runtime. It writes `model_XX.pkl` and `importance_XX.json` into the current `ai-pipeline/models/` directory. The script now uses a date-aware purge so training target windows end before the test period. It writes one `evaluation_XX.json` report per eligible country with test dates, sample counts, model MAE/RMSE/R², and a persistence-baseline comparison. These are run-specific measurements, not precomputed results committed to this repository. Run the split-helper tests from `ai-pipeline/models/` with `python -m unittest discover -s tests -v`. See [evaluation status](docs/evaluation-status.md) before interpreting the metrics.
+The downloader writes `ai-pipeline/data/owid-covid-data.csv` plus country/year mobility files such as `2020_IN_Region_Mobility_Report.csv`. The trainer reads those downloaded files and writes `model_XX.pkl` and `importance_XX.json` into the current `ai-pipeline/models/` directory. The script now uses a date-aware purge so training target windows end before the test period. It writes one `evaluation_XX.json` report per eligible country with test dates, sample counts, model MAE/RMSE/R², and a persistence-baseline comparison. These are run-specific measurements, not precomputed results committed to this repository. Run the split-helper tests from `ai-pipeline/models/` with `python -m unittest discover -s tests -v`. See [evaluation status](docs/evaluation-status.md) before interpreting the metrics.
 
 ### 4. Frontend
 
