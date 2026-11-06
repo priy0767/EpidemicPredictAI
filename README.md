@@ -69,7 +69,7 @@ pip install -r requirements.txt
 uvicorn main:app --reload
 ```
 
-The API expects the SQLite database and model artifacts at the relative paths referenced in `backend/main.py`. Check that these files exist in your local checkout and that the model directory layout matches the API's expected paths before starting the service. The current requirements file may need additional packages depending on the exact frontend/backend environment; dependency pinning is a follow-up task.
+The API resolves the SQLite database and model directory from the repository layout, independent of the process working directory. You can override them with `EPIDEMIC_DATABASE_PATH` and `EPIDEMIC_MODEL_DIR`. Set `CORS_ORIGINS` to a comma-separated list of trusted frontend origins (for example, your Vercel production domain and any preview domain you actively use). The default permits local Vite development only. The backend now uses parameterized SQL queries and validates request dates and numeric mobility inputs. Configure these environment variables in your deployment platform before deploying the API changes.
 
 API base URL: `http://localhost:8000`  
 Interactive API docs: `http://localhost:8000/docs`
@@ -122,7 +122,7 @@ Metrics should only be added after the training pipeline, target definition, tim
 
 ## Security and deployment notes
 
-The current API source contains permissive CORS settings and SQL statements assembled with string interpolation. These should be reviewed before production use. Keep credentials and private configuration out of source control, restrict CORS to trusted frontend origins, and use parameterized SQL queries.
+The API now restricts CORS to configured origins (local Vite origins by default), disables credentialed cross-origin requests, uses parameterized SQL queries, validates date and numeric request fields, and resolves database/model paths from explicit configuration. For deployment, set `CORS_ORIGINS` to the exact frontend origin(s); otherwise the deployed browser frontend will be blocked by CORS. Continue to keep credentials and private configuration out of source control.
 
 ## Contributing
 
