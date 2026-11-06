@@ -1,4 +1,4 @@
-""""Download public COVID-19 case and mobility data for model training.
+"""Download public COVID-19 case and mobility data for model training.
 
 Sources:
 - Our World in Data's archived complete historical COVID-19 CSV.
@@ -15,7 +15,9 @@ import pandas as pd
 
 ROOT = Path(__file__).resolve().parents[1]
 DATA_DIR = ROOT / "data"
-OWID_URL = "https://covid.ourworldindata.org/data/owid-covid-data.csv"
+# Use the archived GitHub raw file instead of the OWID custom domain. This
+# repository snapshot is immutable after 2024-08-19 and avoids that host's DNS.
+OWID_URL = "https://raw.githubusercontent.com/owid/covid-19-data/master/public/data/owid-covid-data.csv"
 GOOGLE_MOBILITY_URL = "https://www.gstatic.com/covid19/mobility/Global_Mobility_Report.csv"
 MOBILITY_COLUMNS = [
     "retail_and_recreation_percent_change_from_baseline",
