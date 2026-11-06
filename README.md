@@ -105,14 +105,14 @@ Vite normally serves the dashboard at `http://localhost:5173`.
 |---|---|---|
 | GET | `/api/countries` | Returns supported country names |
 | GET | `/api/map_snapshot` | Returns historical cumulative-case snapshot |
-| GET | `/api/global_predictions` | Returns country-level estimates using available models or fallback values |
-| POST | `/api/predict` | Runs the country model and scenario calculation |
+| GET | `/api/global_predictions` | Returns next-week average daily case estimates, with fallback countries identified |
+| POST | `/api/predict` | Uses the latest seven observed daily-case values and mobility inputs to estimate next-week average daily cases |
 
 For request fields and implementation details, inspect [backend/main.py](backend/main.py).
 
 ## Prediction behavior and evaluation status
 
-The `/api/predict` endpoint currently computes an XGBoost prediction and a separate hand-written mobility scenario estimate, then averages the two. This is a hybrid application rule, not a separately trained ensemble. The global endpoint also uses zero-valued mobility inputs and fallback estimates when model/data conditions are not met.
+The training target is the **average daily case count over the following seven days**. Both prediction endpoints now return this same unit and horizon; they do not multiply a daily estimate by 14. The single-country endpoint derives the current seven-day average from historical database rows rather than accepting a fabricated hard-coded case count. Mobility slider values are passed to the trained model directly; the previous hand-written scenario blend has been removed. The global endpoint uses zero mobility inputs and falls back to the current seven-day average when a model is unavailable; it reports those countries in `fallback_countries`. The map's color bands are display groupings, not epidemiological risk categories.
 
 No verified held-out chronological MAE, RMSE, or R² results are published in this repository yet. See:
 - [Evaluation status](docs/evaluation-status.md)
