@@ -1,6 +1,6 @@
 # Model Evaluation Status
 
-## Current status: evaluation implemented; real metrics not yet generated
+## Current status: historical training validated; model performance is weak
 
 The training script is located at `ai-pipeline/models/train_model.py`. It consumes the Our World in Data (OWID) historical country/date case CSV and country-level Google Community Mobility Reports. The companion `download_datasets.py` downloads and prepares these inputs.
 
@@ -8,7 +8,7 @@ OWID's legacy complete CSV remains available at the stable URL used by the downl
 
 The training pipeline uses a chronological 80/20 holdout with a date-aware purge. A training row is retained only when its forward target window ends strictly before the first test feature date. This matters because each target is the seven-day rolling average of daily cases shifted seven days into the future.
 
-For each eligible country, the script writes `evaluation_XX.json` with split dates, sample counts, number of purged training rows, model MAE/RMSE/R², persistence-baseline MAE/RMSE, and whether the model beats the baseline on MAE. These reports are generated when the training script is run; no real-world performance values have yet been generated and verified in this repository.
+For each eligible country, the script writes `evaluation_XX.json` with split dates, sample counts, number of purged training rows, model MAE/RMSE/R², persistence-baseline MAE/RMSE, relative MAE, percentage improvement, feature importance, and whether the model beats the baseline on MAE. It also writes `evaluation_summary.json` with the number of countries beating persistence, median/mean MAE ratio, and total test samples.
 
 ## What the current script evaluates
 
@@ -29,7 +29,7 @@ For each eligible country, the script writes `evaluation_XX.json` with split dat
 6. **No results have been independently reproduced here.** Generated reports must be reviewed for sample sizes, baseline comparisons, and plausibility before metrics are quoted in a portfolio.
 7. **Forecast unit.** The API returns the model's next-week average daily case count. The global endpoint uses zero mobility inputs and identifies countries where a persistence baseline is used. The single-country endpoint derives its current seven-day average from historical rows.
 
-## Download and train
+## Next evaluation steps\n\n- Inspect `evaluation_summary.json` and country reports rather than quoting a single global accuracy figure.\n- Compare errors by country and feature importance to determine whether mobility variables contribute useful signal beyond recent case history.\n- Add rolling-origin evaluation before selecting hyperparameters or claiming improvement. Keep the final test period untouched during model selection.\n- Consider a simpler regularized model only as a separately evaluated candidate; do not replace XGBoost based on this one holdout.\n\n## Download and train
 
 From the repository root:
 
