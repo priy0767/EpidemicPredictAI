@@ -141,9 +141,6 @@ for country_name, country_code in country_mapping.items():
     # --- D. TRAIN THE XGBOOST MODEL ---
     print(f"🧠 Training XGBoost Model for {country_name}...")
     ai_features = ['Daily_Cases_7d_Avg'] + [f"{f}_lag14" for f in features]
-    X = final_ml_df[ai_features]
-    y = final_ml_df['Target_Cases_Next_Week']
-
     # Chronological holdout with label-aware purging. Each target at date t
     # uses the next seven days; remove training rows whose target window reaches
     # the first test feature date. Date-based purging remains correct if rows
