@@ -228,7 +228,7 @@ for country_name, country_code in country_mapping.items():
             "ridge_beats_xgboost": bool(ridge_mae < fold_mae),
         })
 
-    rolling_model_maes = [item["model_mae"] for item in rolling_fold_results]
+    rolling_model_maes = [item["xgboost_mae"] for item in rolling_fold_results]
     rolling_baseline_maes = [
         item["persistence_baseline_mae"] for item in rolling_fold_results
     ]
