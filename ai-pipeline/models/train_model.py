@@ -5,7 +5,7 @@ import joblib
 import json
 import os
 from pathlib import Path
-from evaluation_utils import chronological_purged_split
+from evaluation_utils import chronological_purged_split, rolling_origin_purged_splits
 
 print("🚀 Starting the Epidemic Predict Pro Global Model Factory...")
 
@@ -183,6 +183,42 @@ for country_name, country_code in country_mapping.items():
     baseline_rmse = mean_squared_error(y_test, baseline_predictions) ** 0.5
     model_r2 = r2_score(y_test, test_predictions) if len(test_df) >= 2 else None
 
+    # Expanding-window validation on three earlier, non-overlapping time windows.
+    # The final 20% holdout above remains separate from this diagnostic.
+    rolling_fold_results = []
+    for fold_number, (fold_train, fold_test, fold_purged) in enumerate(
+        rolling_origin_purged_splits(final_ml_df, start_fractions=(0.5, 0.6, 0.7), test_fraction=0.1),
+        start=1
+    ):
+        if len(fold_train) < 20 or fold_test.empty:
+            continue
+        fold_model = xgb.XGBRegressor(
+            n_estimators=100, learning_rate=0.1, max_depth=5, random_state=42
+        )
+        fold_model.fit(fold_train[ai_features], fold_train["Target_Cases_Next_Week"])
+        fold_predictions = fold_model.predict(fold_test[ai_features])
+        fold_baseline = fold_test["Daily_Cases_7d_Avg"].to_numpy()
+        fold_y = fold_test["Target_Cases_Next_Week"]
+        fold_mae = mean_absolute_error(fold_y, fold_predictions)
+        fold_baseline_mae = mean_absolute_error(fold_y, fold_baseline)
+        rolling_fold_results.append({
+            "fold": fold_number,
+            "train_samples": int(len(fold_train)),
+            "test_samples": int(len(fold_test)),
+            "purged_train_samples": int(fold_purged),
+            "train_end_date": fold_train["Date"].max().strftime("%Y-%m-%d"),
+            "test_start_date": fold_test["Date"].min().strftime("%Y-%m-%d"),
+            "test_end_date": fold_test["Date"].max().strftime("%Y-%m-%d"),
+            "model_mae": float(fold_mae),
+            "persistence_baseline_mae": float(fold_baseline_mae),
+            "model_beats_baseline_mae": bool(fold_mae < fold_baseline_mae),
+        })
+
+    rolling_model_maes = [item["model_mae"] for item in rolling_fold_results]
+    rolling_baseline_maes = [
+        item["persistence_baseline_mae"] for item in rolling_fold_results
+    ]
+
     evaluation = {
         "country": country_name,
         "country_code": country_code,
@@ -206,6 +242,21 @@ for country_name, country_code in country_mapping.items():
             float((baseline_mae - model_mae) / baseline_mae * 100)
             if baseline_mae > 0 else None
         ),
+        "rolling_origin_evaluation": {
+            "strategy": "three_expanding_windows_before_final_20_percent_holdout",
+            "fold_count": len(rolling_fold_results),
+            "folds": rolling_fold_results,
+            "mean_model_mae": (
+                float(pd.Series(rolling_model_maes).mean()) if rolling_model_maes else None
+            ),
+            "mean_persistence_baseline_mae": (
+                float(pd.Series(rolling_baseline_maes).mean())
+                if rolling_baseline_maes else None
+            ),
+            "folds_beating_persistence": sum(
+                item["model_beats_baseline_mae"] for item in rolling_fold_results
+            ),
+        },
         "feature_importance": {
             name: float(importance)
             for name, importance in zip(ai_features, model.feature_importances_)
