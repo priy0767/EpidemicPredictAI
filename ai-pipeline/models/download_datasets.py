@@ -35,7 +35,7 @@ def download_case_data(output_dir=DATA_DIR):
     return destination
 
 
-def download_mobility_data(country_codes, output_dir=DATA_DIR):
+def download_mobility_data(country_codes=None, output_dir=DATA_DIR):
     """Download Google's global mobility file and split by ISO-2/year."""
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -49,7 +49,7 @@ def download_mobility_data(country_codes, output_dir=DATA_DIR):
     if missing:
         raise ValueError(f"Google mobility file is missing columns: {sorted(missing)}")
 
-    frame = frame[frame["country_region_code"].isin(country_codes)].copy()
+    if country_codes is None:\n        country_codes = frame["country_region_code"].dropna().unique().tolist()\n    frame = frame[frame["country_region_code"].isin(country_codes)].copy()
     frame["Date"] = pd.to_datetime(frame["date"], errors="coerce")
     frame = frame[frame["Date"].dt.year.isin([2020, 2021, 2022])]
     frame = frame[frame["sub_region_1"].isna()]
