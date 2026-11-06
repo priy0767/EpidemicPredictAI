@@ -45,7 +45,7 @@ See [architecture documentation](docs/architecture.md) for implementation detail
 - `backend/epidemic_data.db` — SQLite database (if included in your checkout).
 - `ai-pipeline/models/` — country model and feature-importance artifacts (if included).
 
-**Training-code status:** The training script is present at `ai-pipeline/models/train_model.py`. The companion `download_datasets.py` obtains the public Our World in Data (OWID) historical case series and Google's archived global mobility report, then creates the country/year mobility files expected by the trainer. Google stopped updating its Community Mobility Reports on 15 October 2022, so this is historical research data, not live mobility data. Run the downloader before training; see the reproducible commands below.
+**Training-code status:** The training script is present at `ai-pipeline/models/train_model.py`. The companion `download_datasets.py` obtains the public Our World in Data (OWID) historical case series and Google's archived global mobility report, then creates the country/year mobility files expected by the trainer. OWID's legacy complete dataset is archived (last updated 19 August 2024), and Google stopped updating its Community Mobility Reports on 15 October 2022. This is historical research data, not a live feed. Run the downloader before training; see the reproducible commands below.
 
 ## Run locally
 
